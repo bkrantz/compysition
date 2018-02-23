@@ -374,6 +374,8 @@ class XMLErrorEventAttributeModifier(ErrorEventAttributeModifier):
             cur = json_event.data
             for cur_attr in attr.split("."):
                 cur = cur[cur_attr]
+            if cur == None or cur == "":
+                return "Unknown Error Occured"
             if not cur == json_event.data:
                 return cur
         except Exception:
