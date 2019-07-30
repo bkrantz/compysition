@@ -458,7 +458,7 @@ class LogEvent(Event):
     This is a lightweight event designed to mimic some of the event properties of a regular event
     """
 
-    def __init__(self, level, origin_actor, message, id=None):
+    def __init__(self, level, origin_actor, message, id=None, sensitive=False):
         self.id = id
         self.event_id = uuid().get_hex()
         self.meta_id = id or self.event_id
@@ -466,6 +466,7 @@ class LogEvent(Event):
         self.time = datetime.now().strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
         self.origin_actor = origin_actor
         self.message = message
+        self.sensitive = sensitive
         self.data = {"id":              self.id,
                     "level":            self.level,
                     "time":             self.time,

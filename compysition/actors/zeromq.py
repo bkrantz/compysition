@@ -92,41 +92,70 @@ class _ZMQ(Actor):
     def protocol(self, protocol):
         self._protocol = protocol
 
-    def __init__(self, name, port=DEFAULT_PORT, transmission_protocol=TCP, socket_file=None, host=None, mode="connect", *args, **kwargs):
+    def __init__(self, name, port=DEFAULT_PORT, transmission_protocol=TCP, socket_file=None, host=None, mode="connect", alt_sockets="", socket_name=None, *args, **kwargs):
         super(_ZMQ, self).__init__(name, *args, **kwargs)
         self.blockdiag_config["shape"] = "cloud"
         self.port = port
         self.host = host or socket.gethostbyname(socket.gethostname())
         self.mode = mode
+        self.socket_name = socket_name
 
-        self.format_connection = {self.TCP: "tcp://{0}:{1}".format(self.host, port),
-                                    self.IPC: "ipc://{0}".format(socket_file),
-                                    self.INPROC: "inproc://{0}".format(socket_file)}
+        socket_configs = self._get_alt_socket_configs(alt_sockets=alt_sockets)
+        if self.mode == "bind":
+            if socket_name is None:
+                self.socket_map = {
+                    None: self._create_socket(port=self.port, transmission_protocol=transmission_protocol, socket_file=socket_file)
+                }
+            elif self.socket_name is not None:
+                self.socket_map = {
+                    self.socket_name: self._create_socket(port=socket_configs[self.socket_name][0], transmission_protocol=transmission_protocol, socket_file=socket_configs[self.socket_name][1])
+                }
+        elif self.mode == "connect":
+            self.socket_map = {
+                None: self._create_socket(port=self.port, transmission_protocol=transmission_protocol, socket_file=socket_file)
+            }
+            for socket_name, socket_config in socket_configs.items():
+                self.socket_map[socket_name] = self._create_socket(port=socket_config[0], transmission_protocol=transmission_protocol, socket_file=socket_config[1])
 
-        if transmission_protocol in self.format_connection:
-            self.transmission_protocol = transmission_protocol
+    def _get_alt_socket_configs(self, alt_sockets):
+        socket_configs = {}
+        alt_sockets = alt_sockets.split(",")
+        for alt_socket in alt_sockets:
+            try:
+                alt_configs = alt_socket.split(":")
+                alt_name = alt_configs[0]
+                alt_port = alt_configs[1]
+                try:
+                    alt_file = alt_configs[2]
+                except IndexError:
+                    alt_file = None
+                socket_configs[alt_name] = (alt_port, alt_file)
+            except Exception:
+                pass
+        return socket_configs
+
+    def _create_socket(self, port, transmission_protocol, socket_file):
+        format_connection = {
+            self.TCP: "tcp://{0}:{1}".format(self.host, port),
+            self.IPC: "ipc://{0}".format(socket_file),
+            self.INPROC: "inproc://{0}".format(socket_file)
+        }
+        if transmission_protocol in format_connection.keys():
+            transmission_protocol = transmission_protocol
         else:
             raise ValueError("Transmission protocol must be in {0}".format(self.format_connection.keys()))
 
-        self.socket_file = socket_file
+        return self.create_socket(format_connection=format_connection, transmission_protocol=transmission_protocol)
 
-        self.socket = self.create_socket(context=self.context)
-
-    @property
-    def context(self):
-        if self.transmission_protocol == self.INPROC:
-            return self.shared_context
-        else:
-            return zmq.Context()
-
-    def create_socket(self, context=None):
+    def create_socket(self, format_connection, transmission_protocol):
+        context = self.shared_context if transmission_protocol == self.INPROC else zmq.Context()
         context = context or zmq.Context()
         _socket = context.socket(self.protocol)
 
         if self.mode == "connect":
-            _socket.connect(self.format_connection[self.transmission_protocol])
+            _socket.connect(format_connection[transmission_protocol])
         elif self.mode == "bind":
-            _socket.bind(self.format_connection[self.transmission_protocol])
+            _socket.bind(format_connection[transmission_protocol])
 
         return _socket
 
@@ -155,10 +184,13 @@ class _ZMQOut(_ZMQ):
                 event = None
 
             if event is not None:
-                try:
-                    self.socket.send(pickle.dumps(event))
-                except Exception as err:
-                    self.logger.error("Unable to send event over ZMQ: {err}".format(err=err), event=event)
+                socket = self.socket_map.get(event.get("zmq_socket_name", None), None)
+                if socket is not None:
+                    try:
+                        socket.send(pickle.dumps(event))
+                    except Exception as err:
+                        print(str(event), event.__class__.__name__)
+                        self.logger.error("Unable to send event over ZMQ: {err}".format(err=err), event=event)
 
 
 class _ZMQIn(_ZMQ):
@@ -170,6 +202,7 @@ class _ZMQIn(_ZMQ):
     def __init__(self, name, mode="bind", *args, **kwargs):
         super(_ZMQIn, self).__init__(name, mode=mode, *args, **kwargs)
         self.poller = zmq.Poller()
+        self.socket = self.socket_map.get(socket_name)
         self.poller.register(self.socket, zmq.POLLIN)
 
     def pre_hook(self):

@@ -64,7 +64,7 @@ class FileLogger(Actor):
 
     input = LogEvent
 
-    def __init__(self, name, default_filename="compysition.log", level="INFO", directory="logs", maxBytes=20000000, backupCount=10, *args, **kwargs):
+    def __init__(self, name, default_filename="compysition.log", level="INFO", directory="logs", maxBytes=20000000, backupCount=10, ignore_sensitive=False, *args, **kwargs):
         super(FileLogger, self).__init__(name, *args, **kwargs)
         self.blockdiag_config["shape"] = "note"
         self.default_filename = default_filename
@@ -72,7 +72,7 @@ class FileLogger(Actor):
         self.directory = directory
         self.maxBytes = int(maxBytes)
         self.backupCount = int(backupCount)
-
+        self.ignore_sensitive = ignore_sensitive
         self.loggers = {}
 
     def _create_logger(self, filepath):
@@ -86,13 +86,14 @@ class FileLogger(Actor):
         return file_logger
 
     def _process_log_entry(self, event):
-        event_filename = event.get("logger_filename", self.default_filename)
-        logger = self.loggers.get(event_filename, None)
-        if not logger:
-            logger = self._create_logger("{0}/{1}".format(self.directory, event_filename))
-            self.loggers[event_filename] = logger
+        if not self.ignore_sensitive or not event.get("sensitive", False):
+            event_filename = event.get("logger_filename", self.default_filename)
+            logger = self.loggers.get(event_filename, None)
+            if not logger:
+                logger = self._create_logger("{0}/{1}".format(self.directory, event_filename))
+                self.loggers[event_filename] = logger
 
-        self._do_log(logger, event)
+            self._do_log(logger, event)
 
     def _do_log(self, logger, event):
         actor_name = event.origin_actor

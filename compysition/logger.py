@@ -50,7 +50,7 @@ class Logger(object):
 
         self.__pool = queue_pool
 
-    def log(self, level, message, event=None, log_entry_id=None):
+    def log(self, level, message, event=None, log_entry_id=None, sensitive=False):
         """
         Uses log_entry_id explicitely as the logged ID, if defined. Otherwise, will attempt to ascertain the ID from 'event', if passed
         """
@@ -60,34 +60,49 @@ class Logger(object):
 
         for key in self.__pool.iterkeys():
             try:
-                log_event = LogEvent(level, self.name, message, id=log_entry_id)
+                log_event = LogEvent(level, self.name, message, id=log_entry_id, sensitive=sensitive)
                 self.__pool[key].put(log_event)
             except QueueFull:
                 self.__pool.wait_until_free()
                 self.__pool[key].put(log_event)
 
-    def critical(self, message, event=None, log_entry_id=None):
+    def critical(self, message, event=None, log_entry_id=None, sensitive=False):
         """Generates a log message with priority logging.CRITICAL
         """
-        self.log(logging.CRITICAL, message, event=event, log_entry_id=log_entry_id)
+        self.log(logging.CRITICAL, message, event=event, log_entry_id=log_entry_id, sensitive=sensitive)
 
-    def error(self, message, event=None, log_entry_id=None):
+    def error(self, message, event=None, log_entry_id=None, sensitive=False):
         """Generates a log message with priority error(3).
         """
-        self.log(logging.ERROR, message, event=event, log_entry_id=log_entry_id)
+        self.log(logging.ERROR, message, event=event, log_entry_id=log_entry_id, sensitive=sensitive)
 
-    def warn(self, message, event=None, log_entry_id=None):
+    def warn(self, message, event=None, log_entry_id=None, sensitive=False):
         """Generates a log message with priority logging.WARN
         """
-        self.log(logging.WARN, message, event=event, log_entry_id=log_entry_id)
+        self.log(logging.WARN, message, event=event, log_entry_id=log_entry_id, sensitive=sensitive)
     warning=warn
 
-    def info(self, message, event=None, log_entry_id=None):
+    def info(self, message, event=None, log_entry_id=None, sensitive=False):
         """Generates a log message with priority logging.INFO.
         """
-        self.log(logging.INFO, message, event=event, log_entry_id=log_entry_id)
+        self.log(logging.INFO, message, event=event, log_entry_id=log_entry_id, sensitive=sensitive)
 
-    def debug(self, message, event=None, log_entry_id=None):
+    def debug(self, message, event=None, log_entry_id=None, sensitive=False):
         """Generates a log message with priority logging.DEBUG
         """
-        self.log(logging.DEBUG, message, event=event, log_entry_id=log_entry_id)
+        self.log(logging.DEBUG, message, event=event, log_entry_id=log_entry_id, sensitive=sensitive)
+
+    def alt_logger(self, alt_name, event, **kwargs):
+        new_event = Event()
+        new_event._event_id, new_event.meta_id, new_event.service = event._event_id, event.meta_id, event.service
+        prefix = "%s_" % alt_name
+        for key, value in kwargs.items():
+            field_name = "%s%s" % (prefix,key)
+            new_event.set(field_name, value)
+        new_event.set("zmq_socket_name", alt_name)
+        for key in self.__pool.iterkeys():
+            try:
+                self.__pool[key].put(new_event)
+            except QueueFull:
+                self.__pool.wait_until_free()
+                self.__pool[key].put(new_event)

@@ -263,7 +263,10 @@ class HTTPServer(Actor, Bottle):
 
         if response_queue:
 
-            accept = event.get('accept', original_event_class.content_type)
+            # accept defaults to */* so previously never changed from internal event type unless accept was defined in request
+            # now if accept is set to */* then defaults to the incoming request content-type
+            accept = event.get('accept', "*/*")
+            accept = original_event_class.content_type if accept == "*/*" else accept 
 
             if not isinstance(event, self.CONTENT_TYPE_MAP[accept]):
                 self.logger.warning(
@@ -287,6 +290,19 @@ class HTTPServer(Actor, Bottle):
 
             local_response.body = response_data
 
+            #log response
+            try:
+                self.logger.alt_logger(
+                    alt_name="db_logger", 
+                    type="http_response", 
+                    event=event,
+                    headers=dict(local_response.headers),
+                    status=str(status),
+                    data=str(response_data))
+            except Exception:
+                pass
+
+            #send response
             response_queue.put(local_response)
             response_queue.put(StopIteration)
             self.logger.info("[{status}] Service '{service}' Returned in {time:0.0f} ms".format(
@@ -364,7 +380,17 @@ class HTTPServer(Actor, Bottle):
             event.error = err
             if not self.send_errors:
                 queue = self.pool.inbound[next(self.pool.inbound.iterkeys())]
-
+        finally:
+            try:
+                self.logger.alt_logger(
+                    alt_name="db_logger", 
+                    type="http_request", 
+                    event=event,
+                    headers=dict(request.headers),
+                    environment=dict(environment),
+                    data=str("" if data is None else data))
+            except Exception:
+                pass
         self.logger.info('[{address}] {method} {url}'.format(address=request.remote_addr,
                                                              method=request.method,
                                                              url=request.url), event=event)
