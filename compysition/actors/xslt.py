@@ -66,9 +66,9 @@ class _XSLT(Actor):
 
     def consume(self, event, *args, **kwargs):
         try:
-            self.logger.debug("In: {data}".format(data=event.data_string().replace('\n', '')), event=event)
+            self.logger.debug("In: {data}".format(data=event.data_string().replace('\n', '')), event=event, sensitive=True)
             event.data = self.transform(event.data)
-            self.logger.debug("Out: {data}".format(data=event.data_string().replace('\n', '')), event=event)
+            self.logger.debug("Out: {data}".format(data=event.data_string().replace('\n', '')), event=event, sensitive=True)
             self.logger.info("Successfully transformed XML", event=event)
             self.send_event(event)
         except XSLTApplyError as err:

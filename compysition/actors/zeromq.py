@@ -199,8 +199,8 @@ class _ZMQIn(_ZMQ):
     **A still-abstract implementation of _ZMQ base that is designed for an event being RECEIVED over ZeroMQ**
     """
 
-    def __init__(self, name, mode="bind", *args, **kwargs):
-        super(_ZMQIn, self).__init__(name, mode=mode, *args, **kwargs)
+    def __init__(self, name, mode="bind", socket_name=None, *args, **kwargs):
+        super(_ZMQIn, self).__init__(name, mode=mode, socket_name=socket_name, *args, **kwargs)
         self.poller = zmq.Poller()
         self.socket = self.socket_map.get(socket_name)
         self.poller.register(self.socket, zmq.POLLIN)

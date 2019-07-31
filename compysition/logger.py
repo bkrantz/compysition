@@ -26,7 +26,7 @@
 import logging
 
 from compysition.queue import _InternalQueuePool
-from compysition.event import LogEvent
+from compysition.event import LogEvent, Event
 from compysition.errors import QueueFull
 
 class Logger(object):
